@@ -1,0 +1,11 @@
+# Ignore everything
+*
+# Don't ignore this file
+!.gitignore
+# But descend into directories
+!*/
+# Include C/C++ files
+!*.c
+!*.cpp
+!*.h
+!*.hpp
