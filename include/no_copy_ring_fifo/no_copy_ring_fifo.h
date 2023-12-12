@@ -6,8 +6,6 @@
 #include <vector>
 #include <format>
 
-
-
 template <typename T> class NoCopyRingFifo
 {
 public:
