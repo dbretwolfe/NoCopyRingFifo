@@ -10,5 +10,4 @@ project(
 add_library(NoCopyRingFifo)
 target_sources(NoCopyRingFifo PRIVATE "no_copy_ring_fifo.h")
 set_target_properties(NoCopyRingFifo PROPERTIES LINKER_LANGUAGE CXX)
-
 target_compile_features(NoCopyRingFifo PUBLIC cxx_std_23)
