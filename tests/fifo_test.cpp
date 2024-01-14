@@ -1,29 +1,56 @@
-#include "no_copy_ring_fifo.h"
-#include <iostream>
+#include <format>
 
-#define NUM_FIFO_BYTES (1024)
+#include <gtest/gtest.h>
 
+#include "fifo_test_fixture.h"
+/*
+TEST_F(FifoTestCpp, Reset)
+{
+    fifo.Reset();
 
-void printMe(std::span<uint8_t> container) {
-    
-    std::cout << "container.size(): " << container.size() << std::endl;
-    
-    for(auto item : container) 
+    // Fifo should be empty after reset.
+    EXPECT_EQ(0, fifo.GetSize());
+    EXPECT_EQ(maxFifoSize, fifo.GetSizeRemaining());
+}
+
+TEST_F(FifoTestCpp, PushPop)
+{
+    fifo.Reset();
+
+    uint8_t testVector[maxFifoSize] = {0};
+
+    // Try to pop, should fail because FIFO is empty.
+    uint8_t dataOut = 0;
+    EXPECT_THROW(fifo.Pop(), std::underflow_error);
+
+    // Push until full, testing size along the way.
+    for (int i = 0; i < maxFifoSize; i++)
     {
-        std::cout << +item << ' ' << std::flush;
+        SCOPED_TRACE(std::format("Push loop iteration {}\r\n", i));
+        fifo.Push(i);
+        testVector[i] = i;
+
+        EXPECT_EQ((i + 1), fifo.GetSize());
+        EXPECT_EQ((maxFifoSize - (i + 1)), fifo.GetSizeRemaining());
     }
 
-    std::cout << "\n\n";
+    // Try to push, should throw due to FIFO being full.
+    EXPECT_THROW(fifo.Push(0), std::overflow_error);
+
+    // Push until full, testing size along the way.
+    for (int i = (maxFifoSize - 1); i >= 0; i--)
+    {
+        SCOPED_TRACE(std::format("Pop loop iteration {}\r\n", i));
+        dataOut = 0;
+        dataOut = fifo.Pop();
+        EXPECT_EQ(testVector[maxFifoSize - (i + 1)], dataOut);
+
+        EXPECT_EQ(i, fifo.GetSize());
+        EXPECT_EQ((maxFifoSize - i), fifo.GetSizeRemaining());
+    }
+
+    // Try to pop, should fail because FIFO is empty.
+    EXPECT_THROW(fifo.Pop(), std::underflow_error);
 }
 
-int main()
-{
-    
-    NoCopyRingFifo<uint8_t>* ringfifo = new NoCopyRingFifo<uint8_t>(NUM_FIFO_BYTES);
-
-    NoCopyRingFifo<uint8_t>::FifoSpans spans;
-
-    delete ringfifo;
-    
-    return 0;
-}
+*/
