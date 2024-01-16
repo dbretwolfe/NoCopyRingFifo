@@ -3,16 +3,17 @@
 #include <gtest/gtest.h>
 
 #include "fifo_test_fixture.h"
-/*
-TEST_F(FifoTestCpp, Reset)
+
+TEST_F(FifoTest, Reset)
 {
-    fifo.Reset();
+    fifo->Reset();
 
     // Fifo should be empty after reset.
-    EXPECT_EQ(0, fifo.GetSize());
-    EXPECT_EQ(maxFifoSize, fifo.GetSizeRemaining());
+    EXPECT_EQ(0, fifo->CommitableSize());
+    EXPECT_EQ(maxFifoSize, fifo->ReservableSize());
 }
 
+/*
 TEST_F(FifoTestCpp, PushPop)
 {
     fifo.Reset();

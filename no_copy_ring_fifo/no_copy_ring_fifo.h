@@ -10,14 +10,18 @@ template <typename T> class NoCopyRingFifo
 {
 public:
     
-    // Struct to hold spans used to view or copy a block of data in the FIFO.
-    struct FifoSpans
+    // Class to hold spans used to view or copy a block of data in the FIFO.
+    // A read or write to the FIFO may be split between 2 spans if it wraps around the end of the buffer.
+    class FifoBlock
     {
-        inline bool isSplit(void) const { return (span1.empty() == false); }
-        inline bool isValid(void) const { return (span0.empty() == false); }
+    public:
+        FifoBlock(std::span<T>&& span0) : spans{ span0, std::span<T>() } {}
+        FifoBlock(std::span<T>&& span0, std::span<T>&& span1) : spans{ span0, span1 } {}
 
-        std::span<T> span0;
-        std::span<T> span1;
+        inline bool isSplit(void) const { return (spans[1].empty() == false); }
+        inline bool isValid(void) const { return (spans[0].empty() == false); }
+
+        std::span<T> spans[2];
     };
 
     NoCopyRingFifo(size_t fifoSize)
@@ -26,9 +30,9 @@ public:
         ringBufferSpan = std::span<T>(ringBuffer);
     }
 
-    // Reserve a block of FIFO memory, returning a FifoSpans object.
+    // Reserve a block of FIFO memory, returning a FifoBlock object.
     // An exception is thrown if there is insufficient reservable space.
-    FifoSpans Reserve(size_t reserveSize)
+    FifoBlock Reserve(size_t reserveSize)
     {
         if (reserveSize > ReservableSize())
         {
@@ -63,13 +67,13 @@ public:
         reserved -= commitSize;
     }
 
-    inline size_t ReservableSize(void) const { return (ringBuffer->size() - (reserved + committed)); }
+    inline size_t ReservableSize(void) const { return (ringBuffer.size() - (reserved + committed)); }
     inline size_t CommitableSize(void) const { return reserved; }
     inline size_t ReadableSize(void) const { return committed; }
 
     // Get a span of data starting at the current read index.
     // This does not increment the read index.
-    FifoSpans GetReadSpans(size_t readSize) const
+    FifoBlock GetReadSpans(size_t readSize) const
     {
         if (readSize > committed)
         {
@@ -94,7 +98,7 @@ public:
         readIndex = (readIndex + readsize) % ringBuffer.size();
     }
 
-    void ResetFifo(void)
+    void Reset(void)
     {
         readIndex = 0;
         writeIndex = 0;
@@ -104,7 +108,7 @@ public:
     
 private:
 
-    FifoSpans GetFifoSpans(size_t &index, size_t length, bool incrementIndex)
+    FifoBlock GetFifoSpans(size_t &index, size_t length, bool incrementIndex)
     {
         if (length > ringBuffer->size())
         {
@@ -116,30 +120,29 @@ private:
                 );
         }
 
-        FifoSpans fifoSpans { 0 };
         const size_t remainingFifoSize = (ringBuffer->size() - index);
 
         if (length > remainingFifoSize)
         {
-            fifoSpans.span0 = ringBufferSpan.subspan(index, remainingFifoSize);
-            fifoSpans.span1 = ringBufferSpan.subspan(0, (length - remainingFifoSize));
-
             if (incrementIndex == true)
             {
                 index = length - remainingFifoSize;
             }
+
+            return FifoBlock(
+                ringBufferSpan.subspan(index, remainingFifoSize),
+                ringBufferSpan.subspan(0, (length - remainingFifoSize))
+                );
         }
         else
         {
-            fifoSpans.span0 = ringBufferSpan.subspan(writeIndex, length);
-
             if (incrementIndex == true)
             {
                 index += length;
             }
-        }
 
-        return fifoSpans;
+            return FifoBlock(ringBufferSpan.subspan(writeIndex, length));
+        }
     }
 
     std::vector<T> ringBuffer;
