@@ -4,6 +4,8 @@
 
 #include "no_copy_ring_fifo.h"
 
+typedef uint8_t fifoDataType;
+
 class FifoTest : public testing::Test
 {
 protected:
@@ -12,6 +14,6 @@ protected:
         fifo = new NoCopyRingFifo<uint8_t>(maxFifoSize);
     }
 
-    static constexpr size_t maxFifoSize = 4095;
+    static constexpr size_t maxFifoSize = 10;
     NoCopyRingFifo<uint8_t>* fifo = NULL;
 };

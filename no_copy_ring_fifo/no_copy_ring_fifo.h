@@ -12,11 +12,12 @@ public:
     
     // Class to hold spans used to view or copy a block of data in the FIFO.
     // A read or write to the FIFO may be split between 2 spans if it wraps around the end of the buffer.
-    class FifoBlock
+    class DataBlock
     {
     public:
-        FifoBlock(std::span<T>&& span0) : spans{ span0, std::span<T>() } {}
-        FifoBlock(std::span<T>&& span0, std::span<T>&& span1) : spans{ span0, span1 } {}
+        DataBlock() : spans{ std::span<T>(), std::span<T>() } {}
+        DataBlock(std::span<T>&& span0) : spans{ span0, std::span<T>() } {}
+        DataBlock(std::span<T>&& span0, std::span<T>&& span1) : spans{ span0, span1 } {}
 
         inline bool isSplit(void) const { return (spans[1].empty() == false); }
         inline bool isValid(void) const { return (spans[0].empty() == false); }
@@ -24,19 +25,19 @@ public:
         std::span<T> spans[2];
     };
 
-    NoCopyRingFifo(size_t fifoSize)
+    NoCopyRingFifo(size_t size) : maxSize(size)
     {
-        ringBuffer.resize(fifoSize);
+        ringBuffer.resize(size);
         ringBufferSpan = std::span<T>(ringBuffer);
     }
 
     // Reserve a block of FIFO memory, returning a FifoBlock object.
     // An exception is thrown if there is insufficient reservable space.
-    FifoBlock Reserve(size_t reserveSize)
+    DataBlock Reserve(size_t reserveSize)
     {
         if (reserveSize > ReservableSize())
         {
-            throw std::length_error(
+            throw std::overflow_error(
                 std::format("Not enough free space in FIFO for reserve - requested {}, available {}",
                 reserveSize,
                 ReservableSize())
@@ -45,7 +46,7 @@ public:
 
         reserved += reserveSize;
 
-        return GetFifoSpans(&writeIndex, reserveSize, true);;
+        return GetDataBlock(writeIndex, reserveSize);
     }
 
     // Commit a block of data to the FIFO.  This increases the amount of committed data that is
@@ -55,7 +56,7 @@ public:
     {
         if (commitSize > CommitableSize())
         {
-            throw std::length_error(
+            throw std::overflow_error(
                 std::format("Not enough reserved space in FIFO for commit - requested {}, available {}", 
                 commitSize,
                 CommitableSize()
@@ -73,29 +74,18 @@ public:
 
     // Get a span of data starting at the current read index.
     // This does not increment the read index.
-    FifoBlock GetReadSpans(size_t readSize) const
+    DataBlock ReadBlock(size_t size)
     {
-        if (readSize > committed)
+        if (size > committed)
         {
-            throw std::length_error(
-                std::format("Read larger than committed size - requested {}, available {}", 
-                readSize,
-                committed
-                )
+            throw std::underflow_error(
+                std::format("Read larger than committed size - requested {}, available {}", size, committed)
                 );
         }
 
-        return GetFifoSpans(&readIndex, readSize, false);
-    }
+        committed -= size;
 
-    bool IncrementReadIndex(size_t readsize)
-    {
-        if (readsize > ReadableSize())
-        {
-            return false;
-        }
-
-        readIndex = (readIndex + readsize) % ringBuffer.size();
+        return GetDataBlock(readIndex, size);
     }
 
     void Reset(void)
@@ -105,43 +95,41 @@ public:
         reserved = 0;
         committed = 0;
     }
+
+    const size_t maxSize;
     
 private:
 
-    FifoBlock GetFifoSpans(size_t &index, size_t length, bool incrementIndex)
+    DataBlock GetDataBlock(size_t& index, size_t size)
     {
-        if (length > ringBuffer->size())
+        if (size > ringBuffer.size())
         {
-            throw std::length_error(
-                std::format("Requested span length larger than FIFO size - requested {}, available {}", 
-                length,
-                ringBuffer->size()
+            throw std::overflow_error(
+                std::format("Requested span size larger than FIFO size - requested {}, available {}", 
+                size,
+                ringBuffer.size()
                 )
                 );
         }
-
-        const size_t remainingFifoSize = (ringBuffer->size() - index);
-
-        if (length > remainingFifoSize)
+        else if (size == 0)
         {
-            if (incrementIndex == true)
-            {
-                index = length - remainingFifoSize;
-            }
 
-            return FifoBlock(
-                ringBufferSpan.subspan(index, remainingFifoSize),
-                ringBufferSpan.subspan(0, (length - remainingFifoSize))
+        }
+
+        const size_t remainingBufferSize = (ringBuffer.size() - index);
+        size_t oldIndex = index;
+        index = (index + size) % ringBuffer.size();
+
+        if (size > remainingBufferSize)
+        {
+            return DataBlock(
+                ringBufferSpan.subspan(oldIndex, remainingBufferSize),
+                ringBufferSpan.subspan(0, index)
                 );
         }
         else
         {
-            if (incrementIndex == true)
-            {
-                index += length;
-            }
-
-            return FifoBlock(ringBufferSpan.subspan(writeIndex, length));
+            return DataBlock(ringBufferSpan.subspan(oldIndex, size));
         }
     }
 

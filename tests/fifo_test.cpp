@@ -4,54 +4,107 @@
 
 #include "fifo_test_fixture.h"
 
+
 TEST_F(FifoTest, Reset)
 {
     fifo->Reset();
 
     // Fifo should be empty after reset.
-    EXPECT_EQ(0, fifo->CommitableSize());
+    EXPECT_EQ(fifo->CommitableSize(), 0);
     EXPECT_EQ(maxFifoSize, fifo->ReservableSize());
+
+    // Try to commmit, should fail because no space has been reserved.
+    EXPECT_THROW(fifo->Commit(1), std::overflow_error);
 }
 
-/*
-TEST_F(FifoTestCpp, PushPop)
+// Test filling the FIFO from a reset state with reserve, write, commit, and read of one data element at a time.
+TEST_F(FifoTest, ReserveWriteCommitReadSingle)
 {
-    fifo.Reset();
+    fifo->Reset();
 
-    uint8_t testVector[maxFifoSize] = {0};
+    fifoDataType testVector[maxFifoSize] = {0};
 
-    // Try to pop, should fail because FIFO is empty.
-    uint8_t dataOut = 0;
-    EXPECT_THROW(fifo.Pop(), std::underflow_error);
-
-    // Push until full, testing size along the way.
+    // Reserve until full, testing size along the way.
     for (int i = 0; i < maxFifoSize; i++)
     {
-        SCOPED_TRACE(std::format("Push loop iteration {}\r\n", i));
-        fifo.Push(i);
+        SCOPED_TRACE(std::format("Reserve loop iteration {}\r\n", i));
+
+        EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - i));
+        EXPECT_EQ(fifo->CommitableSize(), i);
+
+        NoCopyRingFifo<fifoDataType>::DataBlock dataBlock = fifo->Reserve(1);
+
+        dataBlock.spans[0][0] = i;
         testVector[i] = i;
-
-        EXPECT_EQ((i + 1), fifo.GetSize());
-        EXPECT_EQ((maxFifoSize - (i + 1)), fifo.GetSizeRemaining());
     }
 
-    // Try to push, should throw due to FIFO being full.
-    EXPECT_THROW(fifo.Push(0), std::overflow_error);
+    // Try to reserve, should throw due to FIFO being fully reserved.
+    EXPECT_THROW(fifo->Reserve(1), std::overflow_error);
 
-    // Push until full, testing size along the way.
-    for (int i = (maxFifoSize - 1); i >= 0; i--)
+    // Commit until full, testing size along the way.
+    for (int i = 0; i < maxFifoSize; i++)
     {
-        SCOPED_TRACE(std::format("Pop loop iteration {}\r\n", i));
-        dataOut = 0;
-        dataOut = fifo.Pop();
-        EXPECT_EQ(testVector[maxFifoSize - (i + 1)], dataOut);
+        SCOPED_TRACE(std::format("Commit loop iteration {}\r\n", i));
 
-        EXPECT_EQ(i, fifo.GetSize());
-        EXPECT_EQ((maxFifoSize - i), fifo.GetSizeRemaining());
+        EXPECT_EQ(fifo->ReservableSize(), 0);
+        EXPECT_EQ(fifo->CommitableSize(), (maxFifoSize - i));
+
+        fifo->Commit(1);
     }
 
-    // Try to pop, should fail because FIFO is empty.
-    EXPECT_THROW(fifo.Pop(), std::underflow_error);
+    // Try to commit, should throw due to FIFO being fully committed.
+    EXPECT_THROW(fifo->Commit(1), std::overflow_error);
+
+    // Read until empty.
+    for (int i = 0; i < maxFifoSize; i++)
+    {
+        SCOPED_TRACE(std::format("Read loop iteration {}\r\n", i));
+
+        EXPECT_EQ(fifo->ReservableSize(), i);
+        EXPECT_EQ(fifo->CommitableSize(), 0);
+
+        fifoDataType dataOut = fifo->ReadBlock(1).spans[0][0];
+        
+        EXPECT_EQ(testVector[i], dataOut);
+    }
+
+    // Try to read, should throw because FIFO is empty.
+    EXPECT_THROW(fifo->ReadBlock(1), std::underflow_error);
 }
 
-*/
+// Test reserves of varying block sizes.
+TEST_F(FifoTest, Reserve)
+{
+    for (int i = 0; i < maxFifoSize; i++)
+    {
+        SCOPED_TRACE(std::format("Reserve loop iteration {}\r\n", i));
+
+        fifo->Reset();
+
+        NoCopyRingFifo<fifoDataType>::DataBlock dataBlock;
+
+        EXPECT_NO_THROW(dataBlock = fifo->Reserve(i));
+
+        EXPECT_EQ(dataBlock.spans[0].size(), i);
+        EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - i));
+        EXPECT_EQ(fifo->CommitableSize(), i);
+    }
+}
+
+// Test commits of varying block sizes.
+TEST_F(FifoTest, Reserve)
+{
+    for (int i = 0; i < maxFifoSize; i++)
+    {
+        SCOPED_TRACE(std::format("Commit loop iteration {}\r\n", i));
+
+        fifo->Reset();
+
+        EXPECT_NO_THROW(fifo->Reserve(maxFifoSize));
+
+        EXPECT_NO_THROW(fifo->Commit(i));
+
+        EXPECT_EQ(fifo->ReservableSize(), 0);
+        EXPECT_EQ(fifo->CommitableSize(), maxFifoSize - i);
+    }
+}
