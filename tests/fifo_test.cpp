@@ -4,6 +4,17 @@
 
 #include "fifo_test_fixture.h"
 
+std::vector<fifoDataType> FifoTest::GetTestVector(int size)
+{
+    // Create a random test vector.
+    std::vector<fifoDataType> testVector;
+    for (int i = 0; i < maxFifoSize; i++)
+    {
+        testVector.push_back(std::rand());
+    }
+
+    return testVector;
+}
 
 TEST_F(FifoTest, Reset)
 {
@@ -22,7 +33,7 @@ TEST_F(FifoTest, ReserveWriteCommitReadSingle)
 {
     fifo->Reset();
 
-    fifoDataType testVector[maxFifoSize] = {0};
+    auto testVector = GetTestVector(maxFifoSize);
 
     // Reserve until full, testing size along the way.
     for (int i = 0; i < maxFifoSize; i++)
@@ -32,10 +43,12 @@ TEST_F(FifoTest, ReserveWriteCommitReadSingle)
         EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - i));
         EXPECT_EQ(fifo->CommitableSize(), i);
 
-        NoCopyRingFifo<fifoDataType>::DataBlock dataBlock = fifo->Reserve(1);
+        NoCopyRingFifo<fifoDataType>::DataBlock inDataBlock;
+        ASSERT_NO_THROW(inDataBlock = fifo->Reserve(1));
+        EXPECT_EQ(inDataBlock.isValid(), true);
+        EXPECT_EQ(inDataBlock.isSplit(), false);
 
-        dataBlock.spans[0][0] = i;
-        testVector[i] = i;
+        inDataBlock.spans[0][0] = testVector[i];
     }
 
     // Try to reserve, should throw due to FIFO being fully reserved.
@@ -63,9 +76,12 @@ TEST_F(FifoTest, ReserveWriteCommitReadSingle)
         EXPECT_EQ(fifo->ReservableSize(), i);
         EXPECT_EQ(fifo->CommitableSize(), 0);
 
-        fifoDataType dataOut = fifo->ReadBlock(1).spans[0][0];
+        NoCopyRingFifo<fifoDataType>::DataBlock outDataBlock;
+        ASSERT_NO_THROW(outDataBlock = fifo->ReadBlock(1));
+        EXPECT_EQ(outDataBlock.isValid(), true);
+        EXPECT_EQ(outDataBlock.isSplit(), false);
         
-        EXPECT_EQ(testVector[i], dataOut);
+        EXPECT_EQ(testVector[i], outDataBlock.spans[0][0]);
     }
 
     // Try to read, should throw because FIFO is empty.
@@ -75,36 +91,129 @@ TEST_F(FifoTest, ReserveWriteCommitReadSingle)
 // Test reserves of varying block sizes.
 TEST_F(FifoTest, Reserve)
 {
-    for (int i = 0; i < maxFifoSize; i++)
+    for (int blockSize = 1; blockSize < maxFifoSize; blockSize++)
     {
-        SCOPED_TRACE(std::format("Reserve loop iteration {}\r\n", i));
+        SCOPED_TRACE(std::format("Reserve block loop iteration {}\r\n", blockSize));
 
         fifo->Reset();
 
         NoCopyRingFifo<fifoDataType>::DataBlock dataBlock;
 
-        EXPECT_NO_THROW(dataBlock = fifo->Reserve(i));
+        ASSERT_NO_THROW(dataBlock = fifo->Reserve(blockSize));
+        EXPECT_EQ(dataBlock.spans[0].size(), blockSize);
+        EXPECT_EQ(dataBlock.isValid(), true);
+        EXPECT_EQ(dataBlock.isSplit(), false);
 
-        EXPECT_EQ(dataBlock.spans[0].size(), i);
-        EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - i));
-        EXPECT_EQ(fifo->CommitableSize(), i);
+        EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - blockSize));
+        EXPECT_EQ(fifo->CommitableSize(), blockSize);
     }
 }
 
 // Test commits of varying block sizes.
-TEST_F(FifoTest, Reserve)
+TEST_F(FifoTest, Commit)
 {
-    for (int i = 0; i < maxFifoSize; i++)
+    for (int blockSize = 1; blockSize < maxFifoSize; blockSize++)
     {
-        SCOPED_TRACE(std::format("Commit loop iteration {}\r\n", i));
+        SCOPED_TRACE(std::format("Commit block loop iteration {}\r\n", blockSize));
 
         fifo->Reset();
 
-        EXPECT_NO_THROW(fifo->Reserve(maxFifoSize));
+        ASSERT_NO_THROW(fifo->Reserve(maxFifoSize));
 
-        EXPECT_NO_THROW(fifo->Commit(i));
+        ASSERT_NO_THROW(fifo->Commit(blockSize));
 
         EXPECT_EQ(fifo->ReservableSize(), 0);
-        EXPECT_EQ(fifo->CommitableSize(), maxFifoSize - i);
+        EXPECT_EQ(fifo->CommitableSize(), (maxFifoSize - blockSize));
+    }
+}
+
+// Test reads of varying block sizes.
+TEST_F(FifoTest, Read)
+{
+    for (int blockSize = 1; blockSize < maxFifoSize; blockSize++)
+    {
+        SCOPED_TRACE(std::format("Read block loop iteration {}\r\n", blockSize));
+
+        auto testVector = GetTestVector(blockSize);
+
+        fifo->Reset();
+
+        // Reserve a block.
+        NoCopyRingFifo<fifoDataType>::DataBlock inDataBlock;
+        ASSERT_NO_THROW(inDataBlock = fifo->Reserve(blockSize));
+        EXPECT_EQ(inDataBlock.spans[0].size(), blockSize);
+        EXPECT_EQ(inDataBlock.isValid(), true);
+        EXPECT_EQ(inDataBlock.isSplit(), false);
+
+        // Copy data from the test vector to the block.
+        ASSERT_NO_THROW(std::copy(testVector.begin(), testVector.begin() + blockSize, inDataBlock.spans[0].begin()));
+        ASSERT_NO_THROW(fifo->Commit(blockSize));
+
+        EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - blockSize));
+        EXPECT_EQ(fifo->CommitableSize(), 0);
+
+        // Read a block.
+        NoCopyRingFifo<fifoDataType>::DataBlock outDataBlock;
+        ASSERT_NO_THROW(outDataBlock = fifo->ReadBlock(blockSize));
+        EXPECT_EQ(outDataBlock.spans[0].size(), blockSize);
+        EXPECT_EQ(outDataBlock.isValid(), true);
+        EXPECT_EQ(outDataBlock.isSplit(), false);
+
+        // Compare input and output.
+        for (int i = 0; i < blockSize; i++)
+        {
+            SCOPED_TRACE(std::format("Read block compare loop iteration {}\r\n", i));
+            EXPECT_EQ(inDataBlock.spans[0][i], outDataBlock.spans[0][i]);
+        }
+    }
+}
+
+// Test FIFO buffer wraparound for various block sizes.
+TEST_F(FifoTest, Wraparound)
+{
+    for (int blockSize = 2; blockSize < maxFifoSize; blockSize++)
+    {
+        SCOPED_TRACE(std::format("Read block loop iteration {}\r\n", blockSize));
+
+        auto testVector = GetTestVector(blockSize);
+
+        fifo->Reset();
+
+        // Reserve, commit and read one less than the buffer size.
+        ASSERT_NO_THROW(fifo->Reserve(maxFifoSize - 1));
+        ASSERT_NO_THROW(fifo->Commit(maxFifoSize - 1));
+        ASSERT_NO_THROW(fifo->ReadBlock(maxFifoSize - 1));
+
+        // Reserve a block.
+        NoCopyRingFifo<fifoDataType>::DataBlock inDataBlock;
+        ASSERT_NO_THROW(inDataBlock = fifo->Reserve(blockSize));
+        EXPECT_EQ(inDataBlock.spans[0].size(), 1);
+        EXPECT_EQ(inDataBlock.spans[1].size(), (blockSize - 1));
+        EXPECT_EQ(inDataBlock.isValid(), true);
+        EXPECT_EQ(inDataBlock.isSplit(), true);
+
+        // Copy data from the test vector to the block.
+        inDataBlock.spans[0][0] = testVector[0];
+        ASSERT_NO_THROW(std::copy(testVector.begin() + 1, testVector.end(), inDataBlock.spans[1].begin()));
+        ASSERT_NO_THROW(fifo->Commit(blockSize));
+
+        EXPECT_EQ(fifo->ReservableSize(), (maxFifoSize - blockSize));
+        EXPECT_EQ(fifo->CommitableSize(), 0);
+
+        // Read a block.
+        NoCopyRingFifo<fifoDataType>::DataBlock outDataBlock;
+        ASSERT_NO_THROW(outDataBlock = fifo->ReadBlock(blockSize));
+        EXPECT_EQ(outDataBlock.spans[0].size(), blockSize);
+        EXPECT_EQ(inDataBlock.isValid(), true);
+        EXPECT_EQ(inDataBlock.isSplit(), true);
+
+        // Compare input and output.
+        EXPECT_EQ(inDataBlock.spans[0][0], outDataBlock.spans[0][0]);
+
+        for (int i = 0; i < (blockSize - 1); i++)
+        {
+            SCOPED_TRACE(std::format("Read block compare loop iteration {}\r\n", i));
+            EXPECT_EQ(inDataBlock.spans[1][i], outDataBlock.spans[1][i]);
+        }
     }
 }
