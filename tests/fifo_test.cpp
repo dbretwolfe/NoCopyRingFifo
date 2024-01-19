@@ -203,7 +203,8 @@ TEST_F(FifoTest, Wraparound)
         // Read a block.
         NoCopyRingFifo<fifoDataType>::DataBlock outDataBlock;
         ASSERT_NO_THROW(outDataBlock = fifo->ReadBlock(blockSize));
-        EXPECT_EQ(outDataBlock.spans[0].size(), blockSize);
+        EXPECT_EQ(outDataBlock.spans[0].size(), 1);
+        EXPECT_EQ(outDataBlock.spans[1].size(), (blockSize - 1));
         EXPECT_EQ(inDataBlock.isValid(), true);
         EXPECT_EQ(inDataBlock.isSplit(), true);
 

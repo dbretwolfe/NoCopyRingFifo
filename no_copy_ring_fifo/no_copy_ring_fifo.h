@@ -113,7 +113,7 @@ private:
         }
         else if (size == 0)
         {
-
+            return DataBlock();
         }
 
         const size_t remainingBufferSize = (ringBuffer.size() - index);
