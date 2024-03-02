@@ -4,6 +4,8 @@
 
 #include "fifo_test_fixture.h"
 
+using namespace FifoTemplates;
+
 std::vector<fifoDataType> FifoTest::GetTestVector(int size)
 {
     // Create a random test vector.
