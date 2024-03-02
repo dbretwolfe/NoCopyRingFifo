@@ -4,6 +4,8 @@
 
 #include "no_copy_ring_fifo.h"
 
+using namespace FifoTemplates;
+
 typedef uint8_t fifoDataType;
 
 class FifoTest : public testing::Test
