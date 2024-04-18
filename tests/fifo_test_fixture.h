@@ -4,7 +4,7 @@
 
 #include "no_copy_ring_fifo.h"
 
-typedef uint8_t fifoDataType;
+typedef uint32_t fifoDataType;
 
 class FifoTest : public testing::Test
 {
@@ -16,5 +16,5 @@ protected:
     std::vector<fifoDataType> GetTestVector(int size);
 
     static constexpr size_t maxFifoSize = 10;
-    FifoTemplates::NoCopyRingFifo<uint8_t> fifo = FifoTemplates::NoCopyRingFifo<uint8_t>(maxFifoSize);
+    FifoTemplates::NoCopyRingFifo<fifoDataType> fifo = FifoTemplates::NoCopyRingFifo<fifoDataType>(maxFifoSize);
 };

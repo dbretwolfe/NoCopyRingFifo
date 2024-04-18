@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1...3.27)
 
 project(
-  NoCopyRingFifoCmake
+  NoCopyRingFifoProj
   VERSION 1.0)
   
 include(FetchContent)

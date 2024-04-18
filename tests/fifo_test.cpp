@@ -196,7 +196,7 @@ TEST_F(FifoTest, Wraparound)
 
         // Copy data from the test vector to the block.
         inDataBlock.spans[0][0] = testVector[0];
-        ASSERT_NO_THROW(std::copy(testVector.begin() + 1, testVector.end(), inDataBlock.spans[1].begin()));
+        ASSERT_NO_THROW(std::copy((testVector.begin() + 1), (testVector.begin() + inDataBlock.spans[1].size()), inDataBlock.spans[1].begin()));
         ASSERT_NO_THROW(fifo.Commit(blockSize));
 
         EXPECT_EQ(fifo.ReservableSize(), (maxFifoSize - blockSize));
